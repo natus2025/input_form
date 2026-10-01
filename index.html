@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aplikasi Web Penginputan Hasil Pemeriksaan Fisik MCU - Firebase Realtime</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <style>
+    .tab-btn.active {
+      border-bottom-color: #2563eb;
+      color: #2563eb;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen">
+
+  <header class="bg-slate-800 text-white shadow-md">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-notes-medical text-blue-400 text-2xl"></i>
+        <h1 class="text-xl font-bold">Sistem Penginputan Hasil Pemeriksaan Fisik MCU</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs bg-blue-900 text-blue-200 px-3 py-1 rounded-full border border-blue-700">
+          Database Aktif: <strong id="current-db-display" class="text-white">Memuat...</strong>
+        </span>
+        <span id="connection-status" class="text-[10px] bg-emerald-500 text-white px-2 py-0.5 rounded-full font-bold">
+          <i class="fa-solid fa-wifi"></i> Live Firebase
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+
+    <!-- Control Toolbar -->
+    <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        
+        <div class="flex flex-wrap items-center gap-2 flex-1 min-w-[300px]">
+          <div class="flex items-center gap-1 border border-slate-300 rounded-lg px-2 py-1.5 bg-slate-50">
+            <label for="db-select" class="text-xs font-semibold text-slate-500 uppercase mr-1">Database:</label>
+            <select id="db-select" onchange="window.switchDatabase(this.value)" class="bg-transparent text-sm font-medium text-slate-700 focus:outline-none cursor-pointer">
+            </select>
+            
+            <button onclick="window.renameCurrentDatabase()" title="Edit Nama Perusahaan" class="ml-1 text-slate-500 hover:text-blue-600 p-1 transition">
+              <i class="fa-solid fa-pen-to-square text-xs"></i>
+            </button>
+            
+            <button onclick="window.deleteCurrentDatabase()" title="Hapus Perusahaan Ini" class="text-slate-500 hover:text-rose-600 p-1 transition">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          </div>
+
+          <button onclick="window.openModal('modal-add-db')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-plus text-xs"></i> Tambah Perusahaan
+          </button>
+
+          <div class="relative flex-1 min-w-[200px]">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+            <input type="text" id="search-input" oninput="window.renderTable()" placeholder="Cari No RM, Nama, NIK..." class="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="window.openInputModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 shadow-sm transition">
+            <i class="fa-solid fa-user-plus text-xs"></i> Input Data
+          </button>
+          
+          <button onclick="window.openModal('modal-import')" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-file-import text-xs"></i> Import Data
+          </button>
+
+          <button onclick="window.exportDataXLSX()" class="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-file-excel text-xs text-emerald-400"></i> Eksport Data
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Data Table -->
+    <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+              <th class="py-3 px-4">No RM</th>
+              <th class="py-3 px-4">Nama Pasien</th>
+              <th class="py-3 px-4">Departemen</th>
+              <th class="py-3 px-4">Tgl Lahir</th>
+              <th class="py-3 px-4">Jenis Kelamin</th>
+              <th class="py-3 px-4">Tgl MCU</th>
+              <th class="py-3 px-4 text-center">Action</th>
+            </tr>
+          </thead>
+          <tbody id="mcu-table-body" class="divide-y divide-slate-100">
+          </tbody>
+        </table>
+      </div>
+      <div id="empty-state" class="p-8 text-center text-slate-400 hidden">
+        <i class="fa-regular fa-folder-open text-4xl mb-2"></i>
+        <p>Belum ada data rekam medis untuk perusahaan ini.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal Tambah Perusahaan -->
+  <div id="modal-add-db" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-lg max-w-md w-full p-6 space-y-4">
+      <h2 class="text-lg font-bold text-slate-800">Tambah Database Perusahaan</h2>
+      <div>
+        <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Perusahaan / Database</label>
+        <input type="text" id="new-db-name" placeholder="Contoh: PT Natus Vincere Medika" class="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="window.closeModal('modal-add-db')" class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Batal</button>
+        <button onclick="window.addDatabase()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Import Data -->
+  <div id="modal-import" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-xl shadow-lg max-w-lg w-full p-6 space-y-5">
+      <div class="flex justify-between items-center border-b pb-3">
+        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <i class="fa-solid fa-file-import text-amber-600"></i> Import Identitas Peserta MCU
+        </h2>
+        <button onclick="window.closeModal('modal-import')" class="text-slate-400 hover:text-slate-600">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 leading-relaxed">
+        <p class="font-semibold mb-1"><i class="fa-solid fa-circle-info"></i> Ketentuan Import:</p>
+        <ul class="list-disc list-inside space-y-0.5">
+          <li>Fitur ini khusus mengimpor data <strong>Identitas Peserta MCU</strong> ke Firebase Realtime.</li>
+          <li>Gunakan format template Excel yang telah disediakan.</li>
+        </ul>
+      </div>
+
+      <div class="flex justify-between items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+        <div>
+          <p class="text-xs font-semibold text-slate-700">Belum punya template?</p>
+          <p class="text-[11px] text-slate-500">Unduh format Excel (.xlsx) siap isi.</p>
+        </div>
+        <button onclick="window.downloadImportTemplate()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-2 rounded-lg font-medium flex items-center gap-1.5 transition shadow-sm">
+          <i class="fa-solid fa-download"></i> Download Template Excel
+        </button>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Pilih File Excel / CSV (.xlsx, .xls, .csv)</label>
+        <input type="file" id="import-file-input" accept=".xlsx, .xls, .csv" class="w-full text-xs text-slate-500 border border-slate-300 rounded-lg cursor-pointer bg-slate-50 file:mr-3 file:py-2 file:px-3 file:rounded-l-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t">
+        <button onclick="window.closeModal('modal-import')" class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50">Batal</button>
+        <button onclick="window.processImportFile()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition shadow-sm">Proses Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Input/Edit Data MCU Form -->
+  <div id="modal-mcu-form" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-2 md:p-4 overflow-hidden">
+    <div class="bg-white rounded-xl shadow-xl max-w-5xl w-full my-auto max-h-[92vh] flex flex-col relative overflow-hidden">
+      
+      <!-- Sticky Modal Header & Tab Navigation -->
+      <div class="sticky top-0 z-20 bg-slate-50 border-b border-slate-200 shadow-sm flex-shrink-0">
+        <div class="px-6 py-3.5 flex justify-between items-center border-b border-slate-200/80">
+          <h2 id="modal-form-title" class="text-lg font-bold text-slate-800">Input Data MCU Pasien</h2>
+          <button onclick="window.closeModal('modal-mcu-form')" class="text-slate-400 hover:text-slate-600 transition">
+            <i class="fa-solid fa-xmark text-xl"></i>
+          </button>
+        </div>
+
+        <div class="flex px-6 bg-slate-50 overflow-x-auto">
+          <button type="button" onclick="window.switchTab('tab-identitas')" class="tab-btn active py-3 px-4 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 whitespace-nowrap">1. Identitas</button>
+          <button type="button" onclick="window.switchTab('tab-riwayat')" class="tab-btn py-3 px-4 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 whitespace-nowrap">2. Riwayat & Gaya Hidup</button>
+          <button type="button" onclick="window.switchTab('tab-vital')" class="tab-btn py-3 px-4 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 whitespace-nowrap">3. Tanda Vital & Visus</button>
+          <button type="button" onclick="window.switchTab('tab-fisik')" class="tab-btn py-3 px-4 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700 whitespace-nowrap">4. Pemeriksaan Fisik (Dokter)</button>
+        </div>
+      </div>
+
+      <!-- Modal Body Form -->
+      <form id="mcu-form" onsubmit="window.saveMCUData(event)" class="p-6 overflow-y-auto flex-1 space-y-6 bg-slate-50/50">
+        <input type="hidden" id="edit-id" value="">
+
+        <!-- TAB 1: IDENTITAS PASIEN -->
+        <div id="tab-identitas" class="tab-content space-y-4">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-id-card"></i>
+              <h3>Identitas Pasien</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tgl. Pemeriksaan *</label>
+                <input type="date" id="tgl_pemeriksaan" required class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">NO RM *</label>
+                <input type="text" id="no_rm" required placeholder="MR-001" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Pasien *</label>
+                <input type="text" id="nama_pasien" required placeholder="Agus" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Departemen</label>
+                <input type="text" id="departemen" placeholder="Operational" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">NIK</label>
+                <input type="text" id="nik" placeholder="3271..." class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Nomor Pekerja</label>
+                <input type="text" id="no_pekerja" placeholder="EMP-001" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Jenis Kelamin (L/P) *</label>
+                <select id="jenis_kelamin" required class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="Laki-laki">Laki-laki</option>
+                  <option value="Perempuan">Perempuan</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tempat Lahir</label>
+                <input type="text" id="tempat_lahir" placeholder="Jakarta" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tgl Lahir *</label>
+                <input type="date" id="tgl_lahir" required class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Alamat</label>
+                <input type="text" id="alamat" placeholder="Jl. Raya No. 12" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Telepon / HP</label>
+                <input type="text" id="telepon" placeholder="08123456789" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Istri / Suami dari</label>
+                <input type="text" id="pasangan_dari" placeholder="Nama Pasangan" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Status Pernikahan</label>
+                <select id="status_pernikahan" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="Belum Kawin">Belum Kawin</option>
+                  <option value="Kawin">Kawin</option>
+                  <option value="Duda">Duda</option>
+                  <option value="Janda">Janda</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Golongan Darah</label>
+                <select id="golongan_darah" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="AB">AB</option>
+                  <option value="O">O</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: RIWAYAT, GAYA HIDUP, KELUARGA & OBSGYN -->
+        <div id="tab-riwayat" class="tab-content hidden space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-file-waveform"></i>
+              <h3>Riwayat Penyakit & Keluhan</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Keluhan Saat Ini</label>
+                <input type="text" id="keluhan" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Hazard / Risiko Lingkungan Kerja</label>
+                <input type="text" id="hazard_kerja" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Riwayat Vaksin</label>
+                <input type="text" id="riwayat_vaksin" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Riwayat Operasi</label>
+                <input type="text" id="riwayat_operasi" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Riwayat Kecelakaan</label>
+                <input type="text" id="riwayat_kecelakaan" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold text-slate-600">Riwayat Penyakit Dahulu</label>
+              <div class="flex flex-wrap gap-4 text-sm bg-slate-50 p-3 rounded-lg border">
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="rp_hipertensi" class="rounded"> Hipertensi</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="rp_diabetes" class="rounded"> Diabetes</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="rp_jantung" class="rounded"> Jantung</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="rp_asma" class="rounded"> Asma</label>
+                <label class="flex items-center gap-1.5"><input type="checkbox" id="rp_tbc" class="rounded"> KP (TBC)</label>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 my-1">Riwayat Penyakit Dahulu (Lain-lain / Tambahan)</label>
+                <input type="text" id="rp_lainnya" value="Tidak ada" placeholder="Sebutkan jika ada riwayat penyakit lainnya..." class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Riwayat Alergi</label>
+                <input type="text" id="riwayat_alergi" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Obat Rutin</label>
+                <input type="text" id="obat_rutin" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Keadaan Emosi / Status Mentalis</label>
+                <input type="text" id="keadaan_emosi" value="Compos Mentis" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-heart-pulse"></i>
+              <h3>Gaya Hidup</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Merokok</label>
+                <input type="text" id="gaya_merokok" value="Tidak merokok" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Olah Raga</label>
+                <input type="text" id="gaya_olahraga" value="Tidak rutin" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kopi</label>
+                <input type="text" id="gaya_kopi" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Alkohol</label>
+                <input type="text" id="gaya_alkohol" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Diet</label>
+                <input type="text" id="gaya_diet" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Konsumsi Sayur/Buah</label>
+                <select id="gaya_sayur" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="Tidak">Tidak</option>
+                  <option value="Cukup" selected>Cukup</option>
+                  <option value="Rutin">Rutin</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-people-roof"></i>
+              <h3>Riwayat Penyakit Keluarga</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Bapak</label>
+                <input type="text" id="rpk_bapak" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Ibu</label>
+                <input type="text" id="rpk_ibu" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Saudara Kandung</label>
+                <input type="text" id="rpk_saudara" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-person-pregnant"></i>
+              <h3>Status Obsgyn (Khusus Wanita)</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Menstruasi Pertama (Umur)</label>
+                <input type="text" id="obsgyn_menstruasi_umur" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Siklus Menstruasi</label>
+                <input type="text" id="obsgyn_siklus" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Menstruasi Terakhir / Menopause</label>
+                <input type="text" id="obsgyn_hpht" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Status (G - P - A)</label>
+                <input type="text" id="obsgyn_gpa" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Apakah Sedang Hamil</label>
+                <select id="obsgyn_hamil" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="Tidak" selected>Tidak</option>
+                  <option value="Ya">Ya</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pemakaian Kontrasepsi</label>
+                <select id="obsgyn_pakai_kontrasepsi" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+                  <option value="Tidak" selected>Tidak</option>
+                  <option value="Ya">Ya</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Jenis Kontrasepsi</label>
+                <input type="text" id="obsgyn_jenis_kontrasepsi" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: TANDA VITAL, NUTRISI & VISUS -->
+        <div id="tab-vital" class="tab-content hidden space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-stethoscope"></i>
+              <h3>Tanda Vital</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tekanan Darah (mmHg)</label>
+                <input type="text" id="td" placeholder="120/80" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Frek. Nadi (x/menit)</label>
+                <input type="text" id="nadi" placeholder="80" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Irama Nadi</label>
+                <input type="text" id="irama_nadi" value="Reguler" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pernafasan (x/menit)</label>
+                <input type="text" id="pernafasan" placeholder="18" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Suhu Badan (°C)</label>
+                <input type="text" id="suhu" placeholder="36.5" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex justify-between items-center text-blue-600 font-semibold">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-weight-scale"></i>
+                <h3>Nutrisi & Antropometri</h3>
+              </div>
+              <span class="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200 font-normal">Standar Kemenkes RI</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Berat Badan (Kg)</label>
+                <input type="number" id="bb" placeholder="65" oninput="window.calculateBMI()" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tinggi Badan (cm)</label>
+                <input type="number" id="tb" placeholder="170" oninput="window.calculateBMI()" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">L. Pinggang (cm)</label>
+                <input type="text" id="lingkar_pinggang" placeholder="80" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Nilai BMI (kg/m²)</label>
+                <input type="text" id="bmi_value" readonly placeholder="Otomatis" class="w-full border border-slate-200 bg-slate-100 rounded-lg p-2 text-sm font-semibold text-slate-700">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Status Gizi (Kemenkes)</label>
+                <input type="text" id="bmi_status" readonly placeholder="Otomatis" class="w-full border border-slate-200 bg-slate-100 rounded-lg p-2 text-sm font-semibold text-slate-700">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-eye"></i>
+              <h3>Pemeriksaan Visus Mata</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">AVOD (Visus Kanan)</label>
+                <input type="text" id="visus_od" value="6/6" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">AVOS (Visus Kiri)</label>
+                <input type="text" id="visus_os" value="6/6" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">ADD (Koreksi Visus)</label>
+                <input type="text" id="add_koreksi_visus" value="Tidak dilakukan" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Buta Warna</label>
+                <input type="text" id="buta_warna" value="Tidak buta warna" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pakai Kaca Mata</label>
+                <input type="text" id="pakai_kacamata" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Ukuran Kaca Mata (OD / OS)</label>
+                <input type="text" id="ukuran_kacamata" placeholder="OD: ..., OS: ..." class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: PEMERIKSAAN FISIK DOKTER -->
+        <div id="tab-fisik" class="tab-content hidden space-y-5">
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center justify-between text-blue-600 font-semibold">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-user-doctor"></i>
+                <h3>Pemeriksaan Kepala, Mata & Kulit</h3>
+              </div>
+              <span class="text-xs text-slate-400 font-normal">Pemeriksaan Fisik Dokter</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kesan Umum</label>
+                <input type="text" id="kesan_umum" value="Baik" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kepala</label>
+                <input type="text" id="pemeriksaan_kepala" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kulit</label>
+                <input type="text" id="pemeriksaan_kulit" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pemeriksaan Mata</label>
+                <input type="text" id="pemeriksaan_mata" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-tooth"></i>
+              <h3>Pemeriksaan Gigi & Mulut</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Pemeriksaan Gigi & Mulut</label>
+                <input type="text" id="gigi_mulut" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Advice Gigi dan Mulut</label>
+                <input type="text" id="gigi_advice" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+            <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Lubang Gigi (D)</label>
+                <input type="number" id="gigi_d" value="0" class="w-full border border-slate-300 bg-white rounded-lg p-1.5 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Gigi Hilang (M)</label>
+                <input type="number" id="gigi_m" value="0" class="w-full border border-slate-300 bg-white rounded-lg p-1.5 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Gigi Tambal (F)</label>
+                <input type="number" id="gigi_f" value="0" class="w-full border border-slate-300 bg-white rounded-lg p-1.5 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-ear-listen"></i>
+              <h3>Pemeriksaan THT & Leher</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Daun Telinga</label>
+                <input type="text" id="tht_daun_telinga" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Lubang Telinga</label>
+                <input type="text" id="tht_lubang_telinga" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Membran Tympani</label>
+                <input type="text" id="tht_membran_tympani" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Hidung / Septum / Concha</label>
+                <input type="text" id="tht_hidung" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Faring</label>
+                <input type="text" id="tht_faring" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tonsil</label>
+                <input type="text" id="tht_tonsil" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div class="md:col-span-3">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Leher</label>
+                <input type="text" id="pemeriksaan_leher" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+              <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+                <i class="fa-solid fa-lungs"></i>
+                <h3>THORAX</h3>
+              </div>
+              <div class="space-y-2">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Bentuk</label>
+                  <input type="text" id="thorax_bentuk" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Inspeksi</label>
+                  <input type="text" id="thorax_inspeksi" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Palpasi</label>
+                  <input type="text" id="thorax_palpasi" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Perkusi</label>
+                  <input type="text" id="thorax_perkusi" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Auskultasi</label>
+                  <input type="text" id="thorax_auskultasi" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+              </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+              <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+                <i class="fa-solid fa-child-reaching"></i>
+                <h3>ABDOMEN & RECTAL</h3>
+              </div>
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Bentuk</label>
+                  <input type="text" id="abdomen_bentuk" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Palpasi / Perkusi</label>
+                  <input type="text" id="abdomen_palpasi" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Hati</label>
+                  <input type="text" id="abdomen_hati" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Limpa</label>
+                  <input type="text" id="abdomen_limpa" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Ginjal</label>
+                  <input type="text" id="abdomen_ginjal" value="Negatif" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-slate-600 mb-0.5">Hernia</label>
+                  <input type="text" id="abdomen_hernia" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-0.5">Rectal</label>
+                <input type="text" id="abdomen_rectal" value="Normal" class="w-full border border-slate-300 rounded-lg p-1.5 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-bone"></i>
+              <h3>Ekstremitas, Musculoskeletal & Tulang Belakang</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kelainan Tulang / Sendi</label>
+                <input type="text" id="kelainan_tulang_sendi" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kelainan Otot-otot</label>
+                <input type="text" id="kelainan_otot" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tulang Belakang</label>
+                <input type="text" id="tulang_belakang" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kelainan Jari / Tangan</label>
+                <input type="text" id="kelainan_jari_tangan" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kelainan Jari / Kaki</label>
+                <input type="text" id="kelainan_jari_kaki" value="Tidak" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Lain-lain Ekstremitas</label>
+                <input type="text" id="ekstremitas_lain" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-brain"></i>
+              <h3>Pemeriksaan Neurologis & Neurologis Khusus</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Reflek Fisiologis</label>
+                <input type="text" id="reflek_fisiologis" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Reflek Patologis</label>
+                <input type="text" id="reflek_patologis" value="Tidak ada" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Kekuatan Motorik</label>
+                <input type="text" id="kekuatan_motorik" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Sensoris</label>
+                <input type="text" id="sensoris" value="Normal" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Otot-otot / Tonus</label>
+                <input type="text" id="otot_tonus" value="Normotoni" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Tes Romberg (Neurologis Khusus)</label>
+                <input type="text" id="tes_romberg" value="Negatif" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="border-b pb-2 flex items-center gap-2 text-blue-600 font-semibold">
+              <i class="fa-solid fa-pen-to-square"></i>
+              <h3>Catatan Dokter & Penutup</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Dokter Pemeriksa</label>
+                <input type="text" id="dokter_pemeriksa" placeholder="dr. ..." class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Lain-lain / Note</label>
+                <input type="text" id="pemeriksaan_lain_lain" value="-" class="w-full border border-slate-300 rounded-lg p-2 text-sm">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-semibold text-slate-600 mb-1">Catatan / Advice Dokter</label>
+                <textarea id="catatan_dokter" rows="2" placeholder="Saran atau rujukan dokter..." class="w-full border border-slate-300 rounded-lg p-2 text-sm"></textarea>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Sticky Modal Footer -->
+        <div class="sticky bottom-0 z-20 border-t border-slate-200 flex justify-between items-center bg-white p-4 -mx-6 -mb-6 rounded-b-xl shadow-lg">
+          <button type="button" onclick="window.closeModal('modal-mcu-form')" class="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition">
+            Batal
+          </button>
+          <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm shadow-sm transition">
+            Simpan Data MCU
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- INTEGRASI FIREBASE SDK (MODUL V9/V10) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set, push, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // -------------------------------------------------------------
+    // GANTI DENGAN KONFIGURASI FIREBASE ANDA
+    // -------------------------------------------------------------
+    const firebaseConfig = {
+      apiKey: "AIzaSyB_c-PCOpiN8-RJ4VM_8_Bq0sK-__fa6cc",
+      authDomain: "form-mcu.firebaseapp.com",
+      projectId: "form-mcu",
+      storageBucket: "form-mcu.firebasestorage.app",
+      messagingSenderId: "116598640672",
+      appId: "1:116598640672:web:c38c4868e6ae812e4fec45"
+    };
+
+    // Inisialisasi Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let databasesList = [];
+    let currentDb = "";
+    let appDataMap = {}; // Penyimpanan data local cache dari listener Firebase
+
+    const DEFAULT_FORM_VALUES = {
+      keluhan: 'Tidak ada', hazard_kerja: 'Tidak ada', riwayat_vaksin: 'Tidak ada', riwayat_operasi: 'Tidak ada', riwayat_kecelakaan: 'Tidak ada',
+      rp_hipertensi: false, rp_diabetes: false, rp_jantung: false, rp_asma: false, rp_tbc: false, rp_lainnya: 'Tidak ada',
+      riwayat_alergi: 'Tidak ada', obat_rutin: 'Tidak ada', keadaan_emosi: 'Compos Mentis', gaya_merokok: 'Tidak merokok', gaya_olahraga: 'Tidak rutin',
+      gaya_kopi: 'Tidak', gaya_alkohol: 'Tidak', gaya_diet: 'Tidak', gaya_sayur: 'Cukup', rpk_bapak: 'Tidak ada', rpk_ibu: 'Tidak ada', rpk_saudara: 'Tidak ada',
+      obsgyn_menstruasi_umur: '-', obsgyn_siklus: '-', obsgyn_hpht: '-', obsgyn_gpa: '-', obsgyn_hamil: 'Tidak', obsgyn_pakai_kontrasepsi: 'Tidak', obsgyn_jenis_kontrasepsi: '-',
+      irama_nadi: 'Reguler', visus_od: '6/6', visus_os: '6/6', add_koreksi_visus: 'Tidak dilakukan', buta_warna: 'Tidak buta warna', pakai_kacamata: 'Tidak',
+      kesan_umum: 'Baik', pemeriksaan_kepala: 'Normal', pemeriksaan_kulit: 'Normal', pemeriksaan_mata: 'Normal', gigi_mulut: 'Normal', gigi_d: 0, gigi_m: 0, gigi_f: 0, gigi_advice: 'Tidak ada',
+      tht_daun_telinga: 'Normal', tht_lubang_telinga: 'Normal', tht_membran_tympani: 'Normal', tht_hidung: 'Normal', tht_faring: 'Normal', tht_tonsil: 'Normal', pemeriksaan_leher: 'Normal',
+      thorax_bentuk: 'Normal', thorax_inspeksi: 'Normal', thorax_palpasi: 'Normal', thorax_perkusi: 'Normal', thorax_auskultasi: 'Normal',
+      abdomen_bentuk: 'Normal', abdomen_palpasi: 'Normal', abdomen_hati: 'Normal', abdomen_limpa: 'Normal', abdomen_ginjal: 'Negatif', abdomen_hernia: 'Tidak ada', abdomen_rectal: 'Normal',
+      kelainan_tulang_sendi: 'Tidak', kelainan_otot: 'Tidak', kelainan_jari_tangan: 'Tidak', kelainan_jari_kaki: 'Tidak', tulang_belakang: 'Normal', ekstremitas_lain: 'Tidak ada',
+      reflek_fisiologis: 'Normal', reflek_patologis: 'Tidak ada', kekuatan_motorik: 'Normal', sensoris: 'Normal', otot_tonus: 'Normotoni', tes_romberg: 'Negatif', pemeriksaan_lain_lain: '-'
+    };
+
+    const ALL_FIELDS = [
+      'tgl_pemeriksaan', 'no_rm', 'nama_pasien', 'departemen', 'nik', 'no_pekerja', 'jenis_kelamin', 'tempat_lahir', 'tgl_lahir', 'alamat', 'telepon', 'pasangan_dari', 'status_pernikahan', 'golongan_darah',
+      'keluhan', 'hazard_kerja', 'riwayat_vaksin', 'riwayat_operasi', 'riwayat_kecelakaan', 'rp_hipertensi', 'rp_diabetes', 'rp_jantung', 'rp_asma', 'rp_tbc', 'rp_lainnya', 'riwayat_alergi', 'obat_rutin', 'keadaan_emosi',
+      'gaya_merokok', 'gaya_olahraga', 'gaya_kopi', 'gaya_alkohol', 'gaya_diet', 'gaya_sayur', 'rpk_bapak', 'rpk_ibu', 'rpk_saudara',
+      'obsgyn_menstruasi_umur', 'obsgyn_siklus', 'obsgyn_hpht', 'obsgyn_gpa', 'obsgyn_hamil', 'obsgyn_pakai_kontrasepsi', 'obsgyn_jenis_kontrasepsi',
+      'td', 'nadi', 'irama_nadi', 'pernafasan', 'suhu', 'bb', 'tb', 'lingkar_pinggang', 'bmi_value', 'bmi_status', 'visus_od', 'visus_os', 'add_koreksi_visus', 'buta_warna', 'pakai_kacamata', 'ukuran_kacamata',
+      'kesan_umum', 'pemeriksaan_kepala', 'pemeriksaan_kulit', 'pemeriksaan_mata', 'gigi_mulut', 'gigi_d', 'gigi_m', 'gigi_f', 'gigi_advice',
+      'tht_daun_telinga', 'tht_lubang_telinga', 'tht_membran_tympani', 'tht_hidung', 'tht_faring', 'tht_tonsil', 'pemeriksaan_leher',
+      'thorax_bentuk', 'thorax_inspeksi', 'thorax_palpasi', 'thorax_perkusi', 'thorax_auskultasi',
+      'abdomen_bentuk', 'abdomen_palpasi', 'abdomen_hati', 'abdomen_limpa', 'abdomen_ginjal', 'abdomen_hernia', 'abdomen_rectal',
+      'kelainan_tulang_sendi', 'kelainan_otot', 'kelainan_jari_tangan', 'kelainan_jari_kaki', 'tulang_belakang', 'ekstremitas_lain',
+      'reflek_fisiologis', 'reflek_patologis', 'kekuatan_motorik', 'sensoris', 'otot_tonus', 'tes_romberg', 'dokter_pemeriksa', 'pemeriksaan_lain_lain', 'catatan_dokter'
+    ];
+
+    // LISTEN DATA REALTIME FIREBASE (MULTI-USER UPDATE AUTOMATIC)
+    const rootRef = ref(db, 'mcu_app');
+    onValue(rootRef, (snapshot) => {
+      const val = snapshot.val();
+      if (!val) {
+        // Jika DB Firebase kosong, inisialisasi default
+        set(ref(db, 'mcu_app/databases'), ['PT Natus Vincere Medika', 'PT Fortace Diagnostics']);
+        return;
+      }
+
+      databasesList = val.databases || [];
+      appDataMap = val.records || {};
+
+      if (!currentDb || !databasesList.includes(currentDb)) {
+        currentDb = databasesList[0] || "";
+      }
+
+      window.initDatabaseSelect();
+      window.renderTable();
+    });
+
+    // --- FUNGSI GLOBAL KE WINDOW ---
+    window.initDatabaseSelect = function() {
+      const select = document.getElementById('db-select');
+      select.innerHTML = '';
+      databasesList.forEach(dbName => {
+        const option = document.createElement('option');
+        option.value = dbName;
+        option.textContent = dbName;
+        if (dbName === currentDb) option.selected = true;
+        select.appendChild(option);
+      });
+      document.getElementById('current-db-display').textContent = currentDb || 'Belum ada DB';
+    };
+
+    window.switchDatabase = function(dbName) {
+      currentDb = dbName;
+      document.getElementById('current-db-display').textContent = currentDb;
+      window.renderTable();
+    };
+
+    window.addDatabase = function() {
+      const input = document.getElementById('new-db-name');
+      const name = input.value.trim();
+      if (!name) return alert('Nama perusahaan tidak boleh kosong');
+      
+      if (!databasesList.includes(name)) {
+        databasesList.push(name);
+        set(ref(db, 'mcu_app/databases'), databasesList);
+      }
+      
+      input.value = '';
+      window.closeModal('modal-add-db');
+      window.switchDatabase(name);
+    };
+
+    window.renameCurrentDatabase = function() {
+      const oldName = currentDb;
+      const newName = prompt('Masukkan nama perusahaan / database baru:', oldName);
+      if (!newName || newName.trim() === '' || newName === oldName) return;
+
+      const trimmed = newName.trim();
+      if (databasesList.includes(trimmed)) return alert('Nama database tersebut sudah ada.');
+
+      const idx = databasesList.indexOf(oldName);
+      if (idx !== -1) databasesList[idx] = trimmed;
+
+      const updates = {};
+      updates['mcu_app/databases'] = databasesList;
+      if (appDataMap[oldName]) {
+        updates[`mcu_app/records/${trimmed}`] = appDataMap[oldName];
+        updates[`mcu_app/records/${oldName}`] = null;
+      }
+
+      update(ref(db), updates).then(() => {
+        currentDb = trimmed;
+        alert(`Nama database berhasil diubah.`);
+      });
+    };
+
+    window.deleteCurrentDatabase = function() {
+      if (databasesList.length <= 1) return alert('Minimal harus ada 1 database aktif.');
+
+      if (confirm(`Hapus database "${currentDb}" beserta seluruh datanya?`)) {
+        const deleted = currentDb;
+        databasesList = databasesList.filter(d => d !== deleted);
+
+        const updates = {};
+        updates['mcu_app/databases'] = databasesList;
+        updates[`mcu_app/records/${deleted}`] = null;
+
+        update(ref(db), updates).then(() => {
+          currentDb = databasesList[0];
+          alert(`Database "${deleted}" dihapus.`);
+        });
+      }
+    };
+
+    window.renderTable = function() {
+      const tbody = document.getElementById('mcu-table-body');
+      const emptyState = document.getElementById('empty-state');
+      const search = document.getElementById('search-input').value.toLowerCase();
+      
+      const dbRecords = appDataMap[currentDb] || {};
+      const keys = Object.keys(dbRecords);
+
+      const filteredKeys = keys.filter(id => {
+        const r = dbRecords[id];
+        return (r.no_rm && r.no_rm.toLowerCase().includes(search)) ||
+               (r.nama_pasien && r.nama_pasien.toLowerCase().includes(search)) ||
+               (r.nik && r.nik.toLowerCase().includes(search));
+      });
+
+      tbody.innerHTML = '';
+
+      if (filteredKeys.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      filteredKeys.forEach(id => {
+        const item = dbRecords[id];
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50/80 transition text-slate-700';
+        tr.innerHTML = `
+          <td class="py-3 px-4 font-mono font-medium text-blue-600">${item.no_rm || '-'}</td>
+          <td class="py-3 px-4 font-semibold">${item.nama_pasien || '-'}</td>
+          <td class="py-3 px-4">${item.departemen || '-'}</td>
+          <td class="py-3 px-4">${formatDate(item.tgl_lahir)}</td>
+          <td class="py-3 px-4">${item.jenis_kelamin || '-'}</td>
+          <td class="py-3 px-4">${formatDate(item.tgl_pemeriksaan)}</td>
+          <td class="py-3 px-4 text-center">
+            <div class="flex items-center justify-center gap-2">
+              <button onclick="window.editData('${id}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-300 text-xs font-medium flex items-center gap-1 transition">
+                <i class="fa-solid fa-pen text-blue-600"></i> Edit
+              </button>
+              <button onclick="window.deleteData('${id}')" class="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded border border-rose-200 text-xs font-medium transition">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    };
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const parts = dateStr.split('-');
+      if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      return dateStr;
+    }
+
+    window.switchTab = function(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      
+      document.getElementById(tabId).classList.remove('hidden');
+      event.currentTarget.classList.add('active');
+    };
+
+    window.calculateBMI = function() {
+      const bb = parseFloat(document.getElementById('bb').value);
+      const tb = parseFloat(document.getElementById('tb').value) / 100;
+      const bmiValInput = document.getElementById('bmi_value');
+      const bmiStatusInput = document.getElementById('bmi_status');
+
+      if (bb > 0 && tb > 0) {
+        const val = parseFloat((bb / (tb * tb)).toFixed(2));
+        let status = '';
+
+        if (val < 18.5) status = 'Sangat Kurus / Kurang';
+        else if (val <= 22.9) status = 'Normal';
+        else if (val <= 24.9) status = 'Kelebihan BB (At-Risk)';
+        else if (val <= 29.9) status = 'Obesitas I';
+        else status = 'Obesitas II';
+        
+        bmiValInput.value = val.toFixed(2);
+        bmiStatusInput.value = status;
+      } else {
+        bmiValInput.value = '';
+        bmiStatusInput.value = '';
+      }
+    };
+
+    window.openInputModal = function() {
+      document.getElementById('mcu-form').reset();
+      document.getElementById('edit-id').value = "";
+      document.getElementById('modal-form-title').textContent = "Input Data MCU Pasien";
+
+      Object.keys(DEFAULT_FORM_VALUES).forEach(key => {
+        const field = document.getElementById(key);
+        if (field) {
+          if (field.type === 'checkbox') field.checked = DEFAULT_FORM_VALUES[key];
+          else field.value = DEFAULT_FORM_VALUES[key];
+        }
+      });
+
+      window.switchTab('tab-identitas');
+      window.openModal('modal-mcu-form');
+    };
+
+    window.editData = function(recordId) {
+      const item = appDataMap[currentDb][recordId];
+      if (!item) return;
+
+      document.getElementById('edit-id').value = recordId;
+      document.getElementById('modal-form-title').textContent = "Edit Data MCU Pasien";
+
+      ALL_FIELDS.forEach(key => {
+        const field = document.getElementById(key);
+        if (field) {
+          if (field.type === 'checkbox') field.checked = !!item[key];
+          else field.value = item[key] !== undefined ? item[key] : (DEFAULT_FORM_VALUES[key] || '');
+        }
+      });
+
+      window.calculateBMI();
+      window.switchTab('tab-identitas');
+      window.openModal('modal-mcu-form');
+    };
+
+    window.saveMCUData = function(e) {
+      e.preventDefault();
+      const recordId = document.getElementById('edit-id').value;
+      
+      const formData = {};
+      ALL_FIELDS.forEach(key => {
+        const field = document.getElementById(key);
+        if (field) {
+          if (field.type === 'checkbox') formData[key] = field.checked;
+          else formData[key] = field.value;
+        }
+      });
+
+      if (!recordId) {
+        // Data Baru -> Push ke Firebase
+        const recordListRef = ref(db, `mcu_app/records/${currentDb}`);
+        push(recordListRef, formData);
+      } else {
+        // Update Data -> Set ke path spesifik
+        const targetRef = ref(db, `mcu_app/records/${currentDb}/${recordId}`);
+        set(targetRef, formData);
+      }
+
+      window.closeModal('modal-mcu-form');
+    };
+
+    window.deleteData = function(recordId) {
+      if (confirm('Apakah Anda yakin ingin menghapus data pemeriksaan pasien ini?')) {
+        const targetRef = ref(db, `mcu_app/records/${currentDb}/${recordId}`);
+        remove(targetRef);
+      }
+    };
+
+    window.downloadImportTemplate = function() {
+      const templateHeaders = [[
+        "Tgl. Pemeriksaan (YYYY-MM-DD)", "No. RM", "Nama Pasien", "Departemen", "NIK", "Nomor Pekerja",
+        "Jenis Kelamin (Laki-laki/Perempuan)", "Tempat Lahir", "Tgl. Lahir (YYYY-MM-DD)", "Alamat",
+        "Telepon", "Istri / Suami dari", "Status Pernikahan", "Golongan Darah"
+      ]];
+
+      const sampleRow = [
+        "2026-09-30", "MR-002", "Budi Santoso", "Logistik", "32710987654321", "EMP-02",
+        "Laki-laki", "Bandung", "1995-05-15", "Jl. Merdeka No. 45", "081298765432", "-", "Kawin", "A"
+      ];
+
+      const wsData = [...templateHeaders, sampleRow];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template_Identitas");
+      XLSX.writeFile(wb, "Template_Import_Identitas_MCU.xlsx");
+    };
+
+    window.processImportFile = function() {
+      const fileInput = document.getElementById('import-file-input');
+      const file = fileInput.files[0];
+      
+      if (!file) return alert('Silakan pilih file Excel/CSV terlebih dahulu.');
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (jsonData.length <= 1) return alert('File tidak berisi data.');
+
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i];
+            if (!row || row.length === 0 || !row[1] || !row[2]) continue;
+
+            const baseRecord = Object.assign({}, DEFAULT_FORM_VALUES, {
+              tgl_pemeriksaan: row[0] || '',
+              no_rm: String(row[1] || ''),
+              nama_pasien: row[2] || '',
+              departemen: row[3] || '',
+              nik: String(row[4] || ''),
+              no_pekerja: String(row[5] || ''),
+              jenis_kelamin: row[6] || 'Laki-laki',
+              tempat_lahir: row[7] || '',
+              tgl_lahir: row[8] || '',
+              alamat: row[9] || '',
+              telepon: String(row[10] || ''),
+              pasangan_dari: row[11] || '-',
+              status_pernikahan: row[12] || 'Belum Kawin',
+              golongan_darah: row[13] || 'A'
+            });
+
+            push(ref(db, `mcu_app/records/${currentDb}`), baseRecord);
+          }
+
+          window.closeModal('modal-import');
+          fileInput.value = '';
+          alert('Proses import ke Firebase selesai!');
+
+        } catch (err) {
+          console.error(err);
+          alert('Gagal membaca file Excel/CSV.');
+        }
+      };
+
+      reader.readAsArrayBuffer(file);
+    };
+
+    window.exportDataXLSX = function() {
+      const dbRecords = appDataMap[currentDb] || {};
+      const keys = Object.keys(dbRecords);
+
+      if (keys.length === 0) return alert('Tidak ada data rekam medis untuk dieksport.');
+
+      const headers = [
+        "Tgl. Pemeriksaan", "No. RM", "Nama Pasien", "Departemen", "NIK", "No. Pekerja", "Jenis Kelamin",
+        "Tempat Lahir", "Tgl. Lahir", "Alamat", "Telepon/HP", "Istri/Suami Dari", "Status Pernikahan", "Golongan Darah",
+        "Keluhan Saat Ini", "Hazard Lingkungan Kerja", "Riwayat Vaksin", "Riwayat Operasi", "Riwayat Kecelakaan",
+        "RP Dahulu (Hipertensi)", "RP Dahulu (Diabetes)", "RP Dahulu (Jantung)", "RP Dahulu (Asma)", "RP Dahulu (TBC)", "RP Dahulu (Lainnya)",
+        "Riwayat Alergi", "Obat Rutin", "Keadaan Emosi/Status Mentalis", "Gaya Hidup (Merokok)", "Gaya Hidup (Olahraga)",
+        "Gaya Hidup (Kopi)", "Gaya Hidup (Alkohol)", "Gaya Hidup (Diet)", "Gaya Hidup (Konsumsi Sayur/Buah)",
+        "RPK (Bapak)", "RPK (Ibu)", "RPK (Saudara Kandung)", "Obsgyn (Umur Menstruasi)", "Obsgyn (Siklus)", "Obsgyn (HPHT/Menopause)",
+        "Obsgyn (G-P-A)", "Obsgyn (Sedang Hamil)", "Obsgyn (Pemakaian Kontrasepsi)", "Obsgyn (Jenis Kontrasepsi)",
+        "Tekanan Darah (mmHg)", "Frek. Nadi (x/m)", "Irama Nadi", "Pernafasan (x/m)", "Suhu (°C)",
+        "Berat Badan (Kg)", "Tinggi Badan (cm)", "Lingkar Pinggang (cm)", "Nilai BMI (2 Desimal)", "Status Gizi (Kemenkes)",
+        "Visus OD", "Visus OS", "ADD Koreksi Visus", "Buta Warna", "Pakai Kacamata", "Ukuran Kacamata",
+        "Kesan Umum", "Kepala", "Kulit", "Pemeriksaan Mata", "Gigi & Mulut", "Gigi Lubang (D)", "Gigi Hilang (M)", "Gigi Tambal (F)", "Advice Gigi",
+        "THT (Daun Telinga)", "THT (Lubang Telinga)", "THT (Membran Tympani)", "THT (Hidung/Concha)", "THT (Faring)", "THT (Tonsil)", "Leher",
+        "Thorax (Bentuk)", "Thorax (Inspeksi)", "Thorax (Palpasi)", "Thorax (Perkusi)", "Thorax (Auskultasi)",
+        "Abdomen (Bentuk)", "Abdomen (Palpasi)", "Abdomen (Hati)", "Abdomen (Limpa)", "Abdomen (Ginjal)", "Abdomen (Hernia)", "Rectal",
+        "Kelainan Tulang/Sendi", "Kelainan Otot", "Kelainan Jari/Tangan", "Kelainan Jari/Kaki", "Tulang Belakang", "Ekstremitas Lain",
+        "Reflek Fisiologis", "Reflek Patologis", "Kekuatan Motorik", "Sensoris", "Otot/Tonus", "Tes Romberg", "Lain-lain Note",
+        "Kesimpulan (Temuan Abnormal)", "Nama Dokter Pemeriksa", "Catatan / Advice Dokter"
+      ];
+
+      const dataRows = keys.map(id => {
+        const r = dbRecords[id];
+        let bmiVal = "-";
+        let bmiStat = "-";
+        const bb = parseFloat(r.bb);
+        const tb = parseFloat(r.tb) / 100;
+        if (bb > 0 && tb > 0) {
+          const val = parseFloat((bb / (tb * tb)).toFixed(2));
+          bmiVal = val.toFixed(2);
+          if (val < 18.5) bmiStat = 'Sangat Kurus / Kurang';
+          else if (val <= 22.9) bmiStat = 'Normal';
+          else if (val <= 24.9) bmiStat = 'Kelebihan BB (At-Risk)';
+          else if (val <= 29.9) bmiStat = 'Obesitas I';
+          else bmiStat = 'Obesitas II';
+        }
+
+        const abnoList = [];
+        const normalWords = ["normal", "baik", "tidak ada", "negatif", "tidak", "-", "compos mentis", "reguler", "cukup", "6/6", "tidak buta warna", "normotoni"];
+
+        const checkAbnormal = (label, val) => {
+          if (val && typeof val === 'string' && val.trim() !== '') {
+            const vLower = val.trim().toLowerCase();
+            if (!normalWords.includes(vLower)) abnoList.push(`${label}: ${val}`);
+          }
+        };
+
+        checkAbnormal("Keluhan", r.keluhan);
+        checkAbnormal("Hazard Kerja", r.hazard_kerja);
+        if (r.rp_hipertensi) abnoList.push("RP Dahulu: Hipertensi");
+        if (r.rp_diabetes) abnoList.push("RP Dahulu: Diabetes");
+        if (r.rp_jantung) abnoList.push("RP Dahulu: Jantung");
+        if (r.rp_asma) abnoList.push("RP Dahulu: Asma");
+        if (r.rp_tbc) abnoList.push("RP Dahulu: TBC");
+        checkAbnormal("RP Lainnya", r.rp_lainnya);
+        checkAbnormal("Alergi", r.riwayat_alergi);
+        checkAbnormal("Obat Rutin", r.obat_rutin);
+        if (bmiStat !== "Normal" && bmiStat !== "-") abnoList.push(`Status Gizi: ${bmiStat}`);
+        checkAbnormal("Visus OD", r.visus_od);
+        checkAbnormal("Visus OS", r.visus_os);
+        checkAbnormal("Buta Warna", r.buta_warna);
+        checkAbnormal("Kesan Umum", r.kesan_umum);
+        checkAbnormal("Kepala", r.pemeriksaan_kepala);
+        checkAbnormal("Kulit", r.pemeriksaan_kulit);
+        checkAbnormal("Mata", r.pemeriksaan_mata);
+        checkAbnormal("Gigi & Mulut", r.gigi_mulut);
+        if (parseInt(r.gigi_d) > 0) abnoList.push(`Gigi Lubang(D): ${r.gigi_d}`);
+        if (parseInt(r.gigi_m) > 0) abnoList.push(`Gigi Hilang(M): ${r.gigi_m}`);
+        if (parseInt(r.gigi_f) > 0) abnoList.push(`Gigi Tambal(F): ${r.gigi_f}`);
+        checkAbnormal("Thorax Bentuk", r.thorax_bentuk);
+        checkAbnormal("Thorax Auskultasi", r.thorax_auskultasi);
+        checkAbnormal("Abdomen Palpasi", r.abdomen_palpasi);
+        checkAbnormal("Abdomen Hati", r.abdomen_hati);
+        checkAbnormal("Abdomen Limpa", r.abdomen_limpa);
+        checkAbnormal("Abdomen Ginjal", r.abdomen_ginjal);
+        checkAbnormal("Hernia", r.abdomen_hernia);
+        checkAbnormal("Rectal", r.abdomen_rectal);
+        checkAbnormal("Tulang Belakang", r.tulang_belakang);
+        checkAbnormal("Tes Romberg", r.tes_romberg);
+
+        const kesimpulanAbnormal = abnoList.length > 0 ? abnoList.join("; ") : "Dalam Batas Normal";
+
+        return [
+          r.tgl_pemeriksaan || '', r.no_rm || '', r.nama_pasien || '', r.departemen || '', r.nik || '', r.no_pekerja || '', r.jenis_kelamin || '',
+          r.tempat_lahir || '', r.tgl_lahir || '', r.alamat || '', r.telepon || '', r.pasangan_dari || '', r.status_pernikahan || '', r.golongan_darah || '',
+          r.keluhan || '', r.hazard_kerja || '', r.riwayat_vaksin || '', r.riwayat_operasi || '', r.riwayat_kecelakaan || '',
+          r.rp_hipertensi ? 'Ya' : 'Tidak', r.rp_diabetes ? 'Ya' : 'Tidak', r.rp_jantung ? 'Ya' : 'Tidak', r.rp_asma ? 'Ya' : 'Tidak', r.rp_tbc ? 'Ya' : 'Tidak', r.rp_lainnya || '',
+          r.riwayat_alergi || '', r.obat_rutin || '', r.keadaan_emosi || '', r.gaya_merokok || '', r.gaya_olahraga || '',
+          r.gaya_kopi || '', r.gaya_alkohol || '', r.gaya_diet || '', r.gaya_sayur || '',
+          r.rpk_bapak || '', r.rpk_ibu || '', r.rpk_saudara || '', r.obsgyn_menstruasi_umur || '', r.obsgyn_siklus || '', r.obsgyn_hpht || '',
+          r.obsgyn_gpa || '', r.obsgyn_hamil || '', r.obsgyn_pakai_kontrasepsi || '', r.obsgyn_jenis_kontrasepsi || '',
+          r.td || '', r.nadi || '', r.irama_nadi || '', r.pernafasan || '', r.suhu || '',
+          r.bb || '', r.tb || '', r.lingkar_pinggang || '', bmiVal, bmiStat,
+          r.visus_od || '', r.visus_os || '', r.add_koreksi_visus || '', r.buta_warna || '', r.pakai_kacamata || '', r.ukuran_kacamata || '',
+          r.kesan_umum || '', r.pemeriksaan_kepala || '', r.pemeriksaan_kulit || '', r.pemeriksaan_mata || '', r.gigi_mulut || '', r.gigi_d || 0, r.gigi_m || 0, r.gigi_f || 0, r.gigi_advice || '',
+          r.tht_daun_telinga || '', r.tht_lubang_telinga || '', r.tht_membran_tympani || '', r.tht_hidung || '', r.tht_faring || '', r.tht_tonsil || '', r.pemeriksaan_leher || '',
+          r.thorax_bentuk || '', r.thorax_inspeksi || '', r.thorax_palpasi || '', r.thorax_perkusi || '', r.thorax_auskultasi || '',
+          r.abdomen_bentuk || '', r.abdomen_palpasi || '', r.abdomen_hati || '', r.abdomen_limpa || '', r.abdomen_ginjal || '', r.abdomen_hernia || '', r.abdomen_rectal || '',
+          r.kelainan_tulang_sendi || '', r.kelainan_otot || '', r.kelainan_jari_tangan || '', r.kelainan_jari_kaki || '', r.tulang_belakang || '', r.ekstremitas_lain || '',
+          r.reflek_fisiologis || '', r.reflek_patologis || '', r.kekuatan_motorik || '', r.sensoris || '', r.otot_tonus || '', r.tes_romberg || '', r.pemeriksaan_lain_lain || '',
+          kesimpulanAbnormal, r.dokter_pemeriksa || '', r.catatan_dokter || ''
+        ];
+      });
+
+      const wsData = [headers, ...dataRows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Laporan_Lengkap_MCU");
+
+      const fileName = `Laporan_Lengkap_MCU_${currentDb.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    };
+
+    window.openModal = function(id) {
+      document.getElementById(id).classList.remove('hidden');
+      document.getElementById(id).classList.add('flex');
+    };
+
+    window.closeModal = function(id) {
+      document.getElementById(id).classList.add('hidden');
+      document.getElementById(id).classList.remove('flex');
+    };
+  </script>
+</body>
+</html>
